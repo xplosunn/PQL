@@ -7,8 +7,8 @@ object PQL {
     def sql: String
   }
 
-  case class Select[T](from: String, where: Option[String], select: String) extends Query[T] {
-    def sql: String = s"select $select from $from${where.fold("")(" where " + _)}"
+  case class Select[T](select: String, from: String, where: Option[String], join: List[String] = List.empty) extends Query[T] {
+    def sql: String = s"select $select from $from${where.fold("")(" where " + _)}${join.reduceOption(_ + " " + _).map(" " + _).getOrElse("")}"
   }
 
   abstract class Table(val name: String)
@@ -23,67 +23,50 @@ object PQL {
     }
   }
 
-  def from[T <: Table](table: T): From[T] = From(table)
+  def from[T <: Table](table: T): From[T] = From(table, table.name)
 
-  def from2[T1 <: Table, T2 <: Table](t1: T1, t2: T2): From2[T1, T2] = From2((t1, t2))
-
-  case class From[T <: Table](table: T, where: Option[String] = None) {
-    def select[V1](row: T => Rep[V1]): Query[V1] = {
-      Select(table.name, where, row(table).name)
-    }
-
-    def select2[V1, V2](row: T => (Rep[V1], Rep[V2])): Query[(V1, V2)] = {
-      val (v1, v2) = row(table)
-      Select(table.name, where, v1.name + ", " + v2.name)
-    }
-
-    def where[C1](predicate: T => Rep[C1]): From[T] with WhereOps = {
-      val pred = where.fold(predicate(table).name)(_ + " and " + predicate(table).name)
-      new From(table, Some(pred)) with WhereOps
-    }
-
-    def join[T2 <: Table](otherTable: T2): On[(T, T2) => Rep[Boolean], From2[T, T2]] = {
-      val on: ((T, T2) => Rep[Boolean]) => From2[T, T2] = {
-        cond =>
-          From2((table, otherTable), Some(cond(table, otherTable).name))
-      }
-      On(on)
-    }
-
-    trait WhereOps { self: From[T] =>
-
-      def and[C1](predicate: T => Rep[C1]): From[T] = {
-        self.where(predicate)
-      }
-    }
-  }
+  def from2[T1 <: Table, T2 <: Table](t1: T1, t2: T2): From[(T1, T2)] = From((t1, t2), t1.name + ", " + t2.name)
 
   case class On[A, B](on: A => B)
 
-  case class From2[T1 <: Table, T2 <: Table](tables: (T1, T2), where: Option[String] = None) {
-    type Tables = (T1, T2)
-
-    private def from(): String = tables._1.name + ", " + tables._2.name
+  case class From[Tables](tables: Tables, from: String, where: Option[String] = None, join: List[String] = Nil) {
 
     def select[V1](row: Tables => Rep[V1]): Query[V1] = {
-      Select(from(), where, row(tables).name)
+      Select(row(tables).name, from, where, join)
     }
 
     def select2[V1, V2](row: Tables => (Rep[V1], Rep[V2])): Query[(V1, V2)] = {
       val (v1, v2) = row(tables)
-      Select(from(), where, v1.name + ", " + v2.name)
+      Select(v1.name + ", " + v2.name, from, where, join)
     }
 
-    def where[C1](predicate: Tables => Rep[C1]): From2[T1, T2] with WhereOps = {
+    def where[C1](predicate: Tables => Rep[C1]): From[Tables] with WhereOps = {
       val pred = where.fold(predicate(tables).name)(_ + " and " + predicate(tables).name)
-      new From2(tables, Some(pred)) with WhereOps
+      new From(tables, from, Some(pred)) with WhereOps
     }
 
-    trait WhereOps { self: From2[T1, T2] =>
+    trait WhereOps { self: From[Tables] =>
 
-      def and[C1](predicate: Tables => Rep[C1]): From2[T1, T2] with WhereOps = {
+      def and[C1](predicate: Tables => Rep[C1]): From[Tables] with WhereOps = {
         self.where(predicate)
       }
+    }
+
+    def join[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
+      join("join", otherTable)
+
+    def innerJoin[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
+      join("inner join", otherTable)
+
+    def outerJoin[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
+      join("outer join", otherTable)
+
+    private def join[T2 <: Table](join: String, otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] = {
+      val on: ((Tables, T2) => Rep[Boolean]) => From[(Tables, T2)] = {
+        cond =>
+          From((tables, otherTable), from, None, List(s"$join ${otherTable.name} on ${cond(tables, otherTable).name}"))
+      }
+      On(on)
     }
   }
 

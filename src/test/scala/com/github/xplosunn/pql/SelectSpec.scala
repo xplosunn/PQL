@@ -46,9 +46,17 @@ class SelectSpec extends mutable.Specification {
 
     "join" >>
       checkTypedQuery[(String, String)](
-        "select table.col, table_two.col from table, table_two where table.another_col = table_two.another_col",
+        "select table.col, table_two.col from table join table_two on table.another_col = table_two.another_col",
         from(SampleTable)
           .join(SampleTable2)
+          .on((t1, t2) => equal(t1.anotherCol, t2.anotherCol))
+          .select2 { case (t1, t2) => (t1.col, t2.col) }
+      )
+    "inner join" >>
+      checkTypedQuery[(String, String)](
+        "select table.col, table_two.col from table inner join table_two on table.another_col = table_two.another_col",
+        from(SampleTable)
+          .innerJoin(SampleTable2)
           .on((t1, t2) => equal(t1.anotherCol, t2.anotherCol))
           .select2 { case (t1, t2) => (t1.col, t2.col) }
       )
