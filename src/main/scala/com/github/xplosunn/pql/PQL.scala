@@ -1,14 +1,33 @@
 package com.github.xplosunn.pql
 
+import com.github.xplosunn.pql.PQL.Query.{Many, MaybeOne, One, Results}
+
 
 object PQL {
 
-  sealed trait Query[T] {
+  object Query {
+    sealed trait Results
+    sealed trait MaybeOne extends Results
+    sealed trait One extends Results
+    sealed trait Many extends Results
+  }
+
+  sealed trait Query[R <: Results, T] {
     def sql: String
   }
 
-  case class Select[T](select: String, from: String, where: Option[String], join: List[String] = List.empty) extends Query[T] {
-    def sql: String = s"select $select from $from${where.fold("")(" where " + _)}${join.reduceOption(_ + " " + _).map(" " + _).getOrElse("")}"
+  sealed trait LimitExists
+  sealed trait Limited extends LimitExists
+  sealed trait Unlimited extends LimitExists
+
+  case class Select[L <: LimitExists, R <: Results, T](select: String, from: String, where: Option[String], join: List[String] = List.empty, limit: Option[Int] = Option.empty) extends Query[R, T] {
+    def sql: String = s"select $select from $from${where.fold("")(" where " + _)}${join.reduceOption(_ + " " + _).map(" " + _).getOrElse("")}${limit.map(" limit " + _).getOrElse("")}"
+
+    def limit1(implicit ev: L =:= Unlimited): Select[Limited, MaybeOne, T] =
+      Select[Limited, MaybeOne, T](select, from, where, join, Some(1))
+
+    def limit(limit: Int)(implicit ev: L =:= Unlimited): Select[Limited, MaybeOne, T] =
+      Select[Limited, MaybeOne, T](select, from, where, join, Some(limit))
   }
 
   abstract class Table(val name: String)
@@ -33,13 +52,13 @@ object PQL {
 
   case class From[Tables](tables: Tables, from: String, where: Option[String] = None, join: List[String] = Nil) {
 
-    def select[V1](row: Tables => Rep[V1]): Query[V1] = {
-      Select(row(tables).name, from, where, join)
+    def select[V1](row: Tables => Rep[V1]): Select[Unlimited, Many, V1] = {
+      Select[Unlimited, Many, V1](row(tables).name, from, where, join)
     }
 
-    def select2[V1, V2](row: Tables => (Rep[V1], Rep[V2])): Query[(V1, V2)] = {
+    def select2[V1, V2](row: Tables => (Rep[V1], Rep[V2])): Select[Unlimited, Many, (V1, V2)] = {
       val (v1, v2) = row(tables)
-      Select(v1.name + ", " + v2.name, from, where, join)
+      Select[Unlimited, Many, (V1, V2)](v1.name + ", " + v2.name, from, where, join)
     }
 
     def where[C1](predicate: Tables => Rep[C1]): From[Tables] with WhereOps = {
