@@ -7,13 +7,13 @@ import org.specs2.matcher.MatchResult
 class SelectSpec extends mutable.Specification {
 
   case object SampleTable extends Table("table") {
-    val col: Rep[String] = Rep("table.col")
-    val anotherCol: Rep[Int] = Rep("table.another_col")
+    val col: Rep[String] = column(this, "col")
+    val anotherCol: Rep[Int] = column(this, "another_col")
   }
 
   case object SampleTable2 extends Table("table_two") {
-    val col: Rep[String] = Rep("table_two.col")
-    val anotherCol: Rep[Int] = Rep("table_two.another_col")
+    val col: Rep[String] = column(this, "col")
+    val anotherCol: Rep[Int] = column(this, "another_col")
   }
 
   "Select" >> {
