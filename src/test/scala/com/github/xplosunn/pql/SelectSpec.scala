@@ -1,11 +1,9 @@
 package com.github.xplosunn.pql
 
-import org.specs2.mutable
-import PQL._
-import com.github.xplosunn.pql.PQL.Query.{Many, MaybeOne, One, Results}
-import org.specs2.matcher.MatchResult
+import com.github.xplosunn.pql.PQL.Query.{Many, MaybeOne}
+import com.github.xplosunn.pql.PQL._
 
-class SelectSpec extends mutable.Specification {
+class SelectSpec extends QuerySpec {
 
   case object SampleTable extends Table("table") {
     val col: Rep[String] = column(this, "col")
@@ -76,9 +74,5 @@ class SelectSpec extends mutable.Specification {
           .select2 { t => (t.col, t.col) }
           .limit(10)
       )
-  }
-
-  def checkTypedQuery[R <: Results, T](expectedSql: String, query: Query[R, T]): MatchResult[String] = {
-    query.sql must beEqualTo(expectedSql)
   }
 }

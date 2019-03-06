@@ -30,6 +30,10 @@ object PQL {
       Select[Limited, MaybeOne, T](select, from, where, join, Some(limit))
   }
 
+  case class Delete(table: String, where: Option[String]) extends Query[One, Int] {
+    override def sql: String = s"delete from $table${where.fold("")(" where " + _)}"
+  }
+
   abstract class Table(val name: String)
 
   case class Rep[T](name: String) extends AnyVal {
@@ -42,7 +46,7 @@ object PQL {
     }
   }
 
-  def column[T](table: Table, name: String) = Rep[T](s"${table.name}.$name")
+  def column[T](table: Table, name: String): Rep[T] = Rep[T](s"${table.name}.$name")
 
   def from[T <: Table](table: T): From[T] = From(table, table.name)
 
@@ -59,6 +63,10 @@ object PQL {
     def select2[V1, V2](row: Tables => (Rep[V1], Rep[V2])): Select[Unlimited, Many, (V1, V2)] = {
       val (v1, v2) = row(tables)
       Select[Unlimited, Many, (V1, V2)](v1.name + ", " + v2.name, from, where, join)
+    }
+
+    def delete(implicit ev: Tables <:< Table) = {
+      Delete(from, where)
     }
 
     def where[C1](predicate: Tables => Rep[C1]): From[Tables] with WhereOps = {
