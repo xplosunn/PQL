@@ -65,6 +65,8 @@ object PQL {
 
   def column[T](table: Table, name: String): Rep[T] = Rep[T](s"${table.name}.$name")
 
+  def optColumn[T](table: Table, name: String): OptRep[T] = OptRep[T](s"${table.name}.$name")
+
   def from[T <: Table](table: T): From[T] = From(table, table.name)
 
   def from2[T1 <: Table, T2 <: Table](t1: T1, t2: T2): From[(T1, T2)] = From((t1, t2), t1.name + ", " + t2.name)

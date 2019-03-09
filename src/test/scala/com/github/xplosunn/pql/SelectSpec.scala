@@ -15,11 +15,21 @@ class SelectSpec extends QuerySpec {
     val anotherCol: Rep[Int] = column(this, "another_col")
   }
 
+  case object SampleTable3 extends Table("table_three") {
+    val col: OptRep[String] = optColumn(this, "col")
+    val anotherCol: Rep[Int] = column(this, "another_col")
+  }
+
   "Select" >> {
     "single column" >>
       checkTypedQuery[Many, String](
         "select table.col from table",
         from(SampleTable).select(_.col)
+      )
+    "single nullable column" >>
+      checkTypedQuery[Many, Option[String]](
+        "select table_three.col from table_three",
+        from(SampleTable3).select(_.col)
       )
     "two columns" >>
       checkTypedQuery[Many, (String, Int)](
