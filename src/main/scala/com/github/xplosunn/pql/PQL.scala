@@ -36,7 +36,22 @@ object PQL {
 
   abstract class Table(val name: String)
 
-  case class Rep[T](name: String) extends AnyVal {
+  case class OptTable[T <: Table](table: T) extends AnyVal {
+    def map[B](f: T => Rep[B]): OptRep[B] = {
+      OptRep(f(table).name)
+    }
+
+    def flatMap[B](f: T => OptRep[B]): OptRep[B] = {
+      f(table)
+    }
+  }
+
+  trait Output[T, Out] {
+    def name: String
+  }
+
+  case class Rep[T](name: String) extends Output[T, T] {
+
     def >(other: T)(implicit num: Numeric[T]): Rep[Boolean] = {
       Rep(name + " > " + other.toString)
     }
@@ -45,6 +60,8 @@ object PQL {
       Rep(name + " < " + other.toString)
     }
   }
+
+  case class OptRep[T](name: String) extends Output[T, Option[T]]
 
   def column[T](table: Table, name: String): Rep[T] = Rep[T](s"${table.name}.$name")
 
@@ -56,13 +73,14 @@ object PQL {
 
   case class From[Tables](tables: Tables, from: String, where: Option[String] = None, join: List[String] = Nil) {
 
-    def select[V1](row: Tables => Rep[V1]): Select[Unlimited, Many, V1] = {
-      Select[Unlimited, Many, V1](row(tables).name, from, where, join)
+    def select[V1, O1](row: Tables => Output[V1, O1]) = {
+      val v1 = row(tables)
+      Select[Unlimited, Many, O1](v1.name, from, where, join)
     }
 
-    def select2[V1, V2](row: Tables => (Rep[V1], Rep[V2])): Select[Unlimited, Many, (V1, V2)] = {
+    def select2[V1, V2, O1, O2](row: Tables => (Output[V1, O1], Output[V2, O2])) = {
       val (v1, v2) = row(tables)
-      Select[Unlimited, Many, (V1, V2)](v1.name + ", " + v2.name, from, where, join)
+      Select[Unlimited, Many, (O1, O2)](v1.name + ", " + v2.name, from, where, join)
     }
 
     def delete(implicit ev: Tables <:< Table) = {
@@ -82,18 +100,18 @@ object PQL {
     }
 
     def join[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
-      join("join", otherTable)
+      join("join", otherTable, identity)
 
     def innerJoin[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
-      join("inner join", otherTable)
+      join("inner join", otherTable, identity)
 
-    def outerJoin[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] =
-      join("outer join", otherTable)
+    def leftJoin[T2 <: Table](otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, OptTable[T2])]] =
+      join("left join", otherTable, OptTable.apply)
 
-    private def join[T2 <: Table](join: String, otherTable: T2): On[(Tables, T2) => Rep[Boolean], From[(Tables, T2)]] = {
-      val on: ((Tables, T2) => Rep[Boolean]) => From[(Tables, T2)] = {
+    private def join[T2 <: Table, WT2](join: String, otherTable: T2, f: T2 => WT2): On[(Tables, T2) => Rep[Boolean], From[(Tables, WT2)]] = {
+      val on: ((Tables, T2) => Rep[Boolean]) => From[(Tables, WT2)] = {
         cond =>
-          From((tables, otherTable), from, None, List(s"$join ${otherTable.name} on ${cond(tables, otherTable).name}"))
+          From((tables, f(otherTable)), from, None, List(s"$join ${otherTable.name} on ${cond(tables, otherTable).name}"))
       }
       On(on)
     }

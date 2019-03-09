@@ -59,6 +59,14 @@ class SelectSpec extends QuerySpec {
           .on((t1, t2) => equal(t1.anotherCol, t2.anotherCol))
           .select2 { case (t1, t2) => (t1.col, t2.col) }
       )
+    "left join" >>
+      checkTypedQuery[Many, (String, Option[String])](
+        "select table.col, table_two.col from table left join table_two on table.another_col = table_two.another_col",
+        from(SampleTable)
+          .leftJoin(SampleTable2)
+          .on((t1, t2) => equal(t1.anotherCol, t2.anotherCol))
+          .select2 { case (t1, t2) => (t1.col, t2.map(_.col)) }
+      )
 
     "limit 1" >>
       checkTypedQuery[MaybeOne, (String, String)](
